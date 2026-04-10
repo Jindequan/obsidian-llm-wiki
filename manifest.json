@@ -1,7 +1,7 @@
 {
 	"id": "llm-wiki",
 	"name": "LLM Wiki",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"minAppVersion": "0.15.0",
 	"description": "Turn URLs, PDFs, and files into structured wiki pages with AI.",
 	"author": "Devin Jin",
