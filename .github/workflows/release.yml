@@ -38,7 +38,9 @@ jobs:
 
       - name: Read package version
         id: package_version
-        run: echo "version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build and package release assets
         run: npm run package:release
@@ -48,8 +50,4 @@ jobs:
         with:
           name: ${{ steps.package_version.outputs.version }}
           overwrite_files: true
-          files: |
-            .release/${{ steps.package_version.outputs.version }}/main.js
-            .release/${{ steps.package_version.outputs.version }}/manifest.json
-            .release/${{ steps.package_version.outputs.version }}/versions.json
-            .release/llm-wiki-${{ steps.package_version.outputs.version }}.zip
+          files: .release/${{ steps.package_version.outputs.version }}/*
