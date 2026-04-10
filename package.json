@@ -1,0 +1,37 @@
+{
+  "name": "obsidian-llm-wiki",
+  "version": "0.1.0",
+  "description": "Automatically ingest external content (web pages, files) and generate structured LLM Wiki pages",
+  "main": ".build/main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "package:release": "npm run build && node package-release.mjs",
+    "version": "node version-bump.mjs"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "llm",
+    "wiki",
+    "ai",
+    "knowledge-base"
+  ],
+  "author": "Devin Jin",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "pdf-parse": "^1.1.1",
+    "turndown": "^7.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/pdf-parse": "^1.1.5",
+    "builtin-modules": "3.3.0",
+    "esbuild": "^0.19.0",
+    "obsidian": "latest",
+    "tslib": "2.6.2",
+    "typescript": "5.3.3"
+  }
+}

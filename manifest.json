@@ -1,0 +1,10 @@
+{
+	"id": "obsidian-llm-wiki",
+	"name": "LLM Wiki",
+	"version": "0.1.0",
+	"minAppVersion": "0.15.0",
+	"description": "Turn URLs and files into structured wiki pages with raw sources, backlinks, and an auto-maintained index",
+	"author": "Devin Jin",
+	"authorUrl": "https://github.com/Jindequan",
+	"isDesktopOnly": false
+}

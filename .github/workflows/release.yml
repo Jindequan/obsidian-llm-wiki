@@ -1,0 +1,52 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync release metadata
+        run: node version-bump.mjs
+
+      - name: Ensure tag matches package version
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          test "$PACKAGE_VERSION" = "$TAG_VERSION"
+
+      - name: Read package version
+        id: package_version
+        run: echo "version=$(node -p 'require(\"./package.json\").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and package release assets
+        run: npm run package:release
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            .release/${{ steps.package_version.outputs.version }}/main.js
+            .release/${{ steps.package_version.outputs.version }}/manifest.json
+            .release/${{ steps.package_version.outputs.version }}/versions.json
+            .release/obsidian-llm-wiki-${{ steps.package_version.outputs.version }}.zip
