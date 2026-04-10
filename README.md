@@ -22,10 +22,10 @@ LLM Wiki saves the raw source, extracts entities and concepts with your preferre
 
 ## How It Organizes Your Vault
 
-The plugin writes content into a predictable structure. By default, it uses `02-Works/wiki/`:
+The plugin writes content into a predictable structure. By default, it creates:
 
 ```text
-02-Works/wiki/
+wiki/
 ├── sources/
 ├── entities/
 ├── concepts/
@@ -33,11 +33,11 @@ The plugin writes content into a predictable structure. By default, it uses `02-
 ├── index.md
 └── log.md
 
-02-Works/raw/
+wiki/../raw/
 └── YYYY-MM-DD-source-slug.md
 ```
 
-You can customize the output path in plugin settings (e.g., `wiki/` for vault root).
+You can customize the output path in plugin settings (e.g., `02-Works/wiki/` for organized vaults).
 
 Each generated page follows a consistent wiki schema with metadata, summary, key points, connections, and references back to the raw source.
 
