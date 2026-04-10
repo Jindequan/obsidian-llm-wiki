@@ -14,6 +14,20 @@ The repository includes `version-bump.mjs` to keep `manifest.json` and `versions
 The compiled bundle is written to `.build/main.js`.
 Release-ready assets are assembled under `.release/<version>/`.
 
+## Obsidian Submission Requirements
+
+Before submitting to the community plugin directory, make sure the repository root contains:
+
+- `README.md`
+- `LICENSE`
+- `manifest.json`
+
+Also make sure:
+
+- `manifest.json.version` uses exact `x.y.z` format
+- the GitHub tag exactly matches `manifest.json.version`
+- `manifest.json.id` does not contain `obsidian`
+
 ## Automated Release Flow
 
 This repository uses a single-repository release workflow:

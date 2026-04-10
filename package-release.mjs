@@ -5,13 +5,15 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const packageJson = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+const manifest = JSON.parse(fs.readFileSync(path.join(rootDir, 'manifest.json'), 'utf8'));
 const version = packageJson.version;
+const pluginId = manifest.id;
 
 const buildMainPath = path.join(rootDir, '.build', 'main.js');
 const manifestPath = path.join(rootDir, 'manifest.json');
 const versionsPath = path.join(rootDir, 'versions.json');
 const releaseDir = path.join(rootDir, '.release', version);
-const archivePath = path.join(rootDir, '.release', `obsidian-llm-wiki-${version}.zip`);
+const archivePath = path.join(rootDir, '.release', `${pluginId}-${version}.zip`);
 
 if (!fs.existsSync(buildMainPath)) {
 	throw new Error(`Build artifact not found: ${buildMainPath}`);

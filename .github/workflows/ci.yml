@@ -33,5 +33,24 @@ jobs:
       - name: Verify synced metadata is committed
         run: git diff --exit-code manifest.json versions.json
 
+      - name: Validate Obsidian submission requirements
+        run: |
+          test -f README.md
+          test -f LICENSE
+          test -f manifest.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+          const semver = /^\d+\.\d+\.\d+$/;
+
+          if (!semver.test(manifest.version)) {
+            throw new Error(`manifest.version must use x.y.z format, got: ${manifest.version}`);
+          }
+
+          if (manifest.id.toLowerCase().includes('obsidian')) {
+            throw new Error(`manifest.id must not contain "obsidian", got: ${manifest.id}`);
+          }
+          NODE
+
       - name: Build plugin
         run: npm run build

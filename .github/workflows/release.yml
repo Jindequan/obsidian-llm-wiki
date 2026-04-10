@@ -50,4 +50,4 @@ jobs:
             .release/${{ steps.package_version.outputs.version }}/main.js
             .release/${{ steps.package_version.outputs.version }}/manifest.json
             .release/${{ steps.package_version.outputs.version }}/versions.json
-            .release/obsidian-llm-wiki-${{ steps.package_version.outputs.version }}.zip
+            .release/llm-wiki-${{ steps.package_version.outputs.version }}.zip
