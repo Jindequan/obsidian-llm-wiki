@@ -30,6 +30,7 @@ jobs:
         run: node version-bump.mjs
 
       - name: Ensure tag matches package version
+        if: github.event_name == 'push'
         run: |
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
           TAG_VERSION="${GITHUB_REF_NAME}"
