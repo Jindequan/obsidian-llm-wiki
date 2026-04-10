@@ -3,7 +3,7 @@ name: Release Plugin
 on:
   push:
     tags:
-      - "v*"
+      - "*.*.*"
   workflow_dispatch:
 
 permissions:
@@ -32,7 +32,7 @@ jobs:
       - name: Ensure tag matches package version
         run: |
           PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="${GITHUB_REF_NAME}"
           test "$PACKAGE_VERSION" = "$TAG_VERSION"
 
       - name: Read package version
@@ -45,6 +45,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          name: ${{ steps.package_version.outputs.version }}
           files: |
             .release/${{ steps.package_version.outputs.version }}/main.js
             .release/${{ steps.package_version.outputs.version }}/manifest.json

@@ -1,6 +1,6 @@
 # LLM Wiki for Obsidian
 
-Turn URLs, PDFs, Markdown files, and text files into structured wiki pages inside your Obsidian vault.
+Turn URLs, PDFs, and files into structured wiki pages with AI.
 
 LLM Wiki saves the raw source, extracts entities and concepts with your preferred AI provider, writes linked notes, and keeps an index of generated pages so your vault stays traceable instead of becoming a pile of one-off summaries.
 
@@ -49,7 +49,7 @@ Each generated page follows a consistent wiki schema with metadata, summary, key
 2. Create this folder inside your vault:
 
 ```text
-<vault>/.obsidian/plugins/obsidian-llm-wiki/
+<vault>/.obsidian/plugins/llm-wiki/
 ```
 
 3. Copy these files into that folder:

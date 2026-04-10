@@ -22,7 +22,7 @@ This repository uses a single-repository release workflow:
 2. Run `npm run version`
 3. Commit `package.json`, `manifest.json`, and `versions.json`
 4. Push the commit
-5. Create a tag such as `v0.1.0`
+5. Create a tag such as `0.1.0`
 6. Push the tag
 7. Let `.github/workflows/release.yml` build the plugin and publish the GitHub Release automatically
 
@@ -35,7 +35,7 @@ Before publishing a new version:
 3. Run `npm run build`
 4. Run `npm run package:release` if you want to inspect the local release bundle
 5. Verify that `.release/<version>/main.js`, `manifest.json`, and `versions.json` are present
-6. Push a version tag such as `v0.1.0`
+6. Push a version tag such as `0.1.0`
 7. Confirm that GitHub Actions created the release assets automatically
 
 ## Obsidian Community Plugin Submission
@@ -55,4 +55,4 @@ To submit this plugin to the official Obsidian community plugin directory:
 
 - Obsidian community plugins require a public source repository
 - The plugin id in `manifest.json` should remain stable once submitted
-- The tag pushed to GitHub must match the version in `package.json`
+- The tag and release name pushed to GitHub must exactly match the version in `package.json` with no `v` prefix

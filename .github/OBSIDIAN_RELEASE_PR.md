@@ -2,13 +2,13 @@
 
 ## Plugin Information
 
-**Plugin ID:** `obsidian-llm-wiki`
+**Plugin ID:** `llm-wiki`
 **Plugin Name:** LLM Wiki
 **Repository:** https://github.com/Jindequan/obsidian-llm-wiki
 
 ## Description
 
-Turn URLs, PDFs, Markdown files, and text files into structured wiki pages inside your Obsidian vault. LLM Wiki saves the raw source, extracts entities and concepts with your preferred AI provider, writes linked notes, and keeps an index of generated pages.
+Turn URLs, PDFs, and files into structured wiki pages with AI.
 
 ## Features
 
