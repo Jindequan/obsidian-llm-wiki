@@ -46,6 +46,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.package_version.outputs.version }}
+          update_existing_files: true
           files: |
             .release/${{ steps.package_version.outputs.version }}/main.js
             .release/${{ steps.package_version.outputs.version }}/manifest.json
