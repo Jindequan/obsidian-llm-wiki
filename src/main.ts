@@ -1,7 +1,8 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { App, Plugin, Notice, TFile, WorkspaceLeaf } from 'obsidian';
 import { LLMWikiSettingTab } from './settings';
 import { SidebarView, VIEW_TYPE_SIDEBAR } from './ui/sidebar';
 import { ProviderType } from './providers';
+import { HttpServer } from './http-server';
 
 export interface LLMWikiSettings {
 	aiProvider: ProviderType;
@@ -11,6 +12,7 @@ export interface LLMWikiSettings {
 	customSchema: string;
 	enableSidebar: boolean;
 	customBaseUrl?: string;
+	httpServerPort: number;
 }
 
 export const DEFAULT_SETTINGS: LLMWikiSettings = {
@@ -21,14 +23,20 @@ export const DEFAULT_SETTINGS: LLMWikiSettings = {
 	customSchema: '',
 	enableSidebar: true,
 	customBaseUrl: '',
+	httpServerPort: 27124,
 };
 
 export default class LLMWikiPlugin extends Plugin {
 	settings: LLMWikiSettings;
-	private sidebarView: SidebarView | null = null;
+	sidebarView: SidebarView | null = null;
+	private httpServer: HttpServer | null = null;
 
 	async onload() {
 		await this.loadSettings();
+
+		// Initialize HTTP server
+		this.httpServer = new HttpServer(this);
+		await this.httpServer.start();
 
 		// Register sidebar view
 		this.registerView(
@@ -72,11 +80,24 @@ export default class LLMWikiPlugin extends Plugin {
 		// Add setting tab
 		this.addSettingTab(new LLMWikiSettingTab(this.app, this));
 
-		console.log('LLM Wiki plugin loaded');
 	}
 
 	onunload() {
-		console.log('LLM Wiki plugin unloaded');
+		// Stop HTTP server
+		if (this.httpServer) {
+			this.httpServer.stop();
+		}
+	}
+
+	restartHttpServer() {
+		// Stop existing server
+		if (this.httpServer) {
+			this.httpServer.stop();
+		}
+
+		// Start new server with new port
+		this.httpServer = new HttpServer(this);
+		this.httpServer.start();
 	}
 
 	async loadSettings() {
@@ -215,7 +236,7 @@ class UrlInputModal {
 	private modalEl: HTMLElement;
 	private onSubmit: (url: string) => void;
 
-	constructor(app: App, onSubmit: (url: string) => void) {
+	constructor(_app: App, onSubmit: (url: string) => void) {
 		this.onSubmit = onSubmit;
 
 		this.modalEl = document.createElement('div');

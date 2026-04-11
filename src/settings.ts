@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
 import LLMWikiPlugin from './main';
 import { ProviderType } from './providers';
 
@@ -16,6 +16,24 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 		containerEl.empty();
 		containerEl.createEl('h2', { text: 'LLM Wiki Settings' });
 
+		// Add browser extension setup notice
+		const browserExtNotice = containerEl.createDiv();
+		browserExtNotice.className = 'setting-item';
+		browserExtNotice.innerHTML = `
+			<div style="padding: 12px; background: var(--background-secondary); border-radius: 6px; border-left: 3px solid var(--interactive-accent);">
+				<h3 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 600;">🌐 Browser Extension</h3>
+				<p style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-muted);">
+					This plugin has a built-in HTTP server for browser extension integration.
+				</p>
+				<p style="margin: 0 0 8px 0; font-size: 13px; color: var(--text-muted);">
+					Server running at: <strong>http://localhost:${this.plugin.settings.httpServerPort}</strong>
+				</p>
+				<p style="margin: 0; font-size: 13px; color: var(--text-muted);">
+					Install the Chrome extension to send URLs from your browser directly to Obsidian!
+				</p>
+			</div>
+		`;
+
 		new Setting(containerEl)
 			.setName('AI Provider')
 			.setDesc('Choose the AI provider for generating wiki content')
@@ -25,6 +43,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 				.addOption('zai', 'Z.AI')
 				.addOption('deepseek', 'DeepSeek')
 				.addOption('aliqwen', 'Ali Qwen')
+				.addOption('custom', 'Custom (OpenAI-compatible)')
 				.setValue(this.plugin.settings.aiProvider)
 				.onChange(async (value: ProviderType) => {
 					this.plugin.settings.aiProvider = value;
@@ -39,7 +58,7 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 					};
 					this.plugin.settings.model = defaultModels[value] || 'gpt-4-turbo-preview';
 					await this.plugin.saveSettings();
-					this.display(); // Refresh to show model update
+					this.display(); // Refresh to show/hide custom URL field
 				}));
 
 		new Setting(containerEl)
@@ -55,6 +74,20 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
+
+		// Show custom base URL only for custom provider
+		if (this.plugin.settings.aiProvider === 'custom') {
+			new Setting(containerEl)
+				.setName('Custom API Base URL')
+				.setDesc('Base URL for your custom API provider (e.g., https://api.example.com/v1)')
+				.addText((text) => text
+					.setPlaceholder('https://api.example.com/v1')
+					.setValue(this.plugin.settings.customBaseUrl || '')
+					.onChange(async (value) => {
+						this.plugin.settings.customBaseUrl = value;
+						await this.plugin.saveSettings();
+					}));
+		}
 
 		const modelDesc = document.createDocumentFragment();
 		modelDesc.append(
@@ -127,6 +160,28 @@ export class LLMWikiSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					this.plugin.settings.enableSidebar = value;
 					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('HTTP Server Port')
+			.setDesc('Port for the built-in HTTP server (change if port 27124 is already in use)')
+			.addText((text) => text
+				.setPlaceholder('27124')
+				.setValue(this.plugin.settings.httpServerPort.toString())
+				.onChange(async (value) => {
+					const port = parseInt(value);
+					if (!isNaN(port) && port > 0 && port < 65536) {
+						this.plugin.settings.httpServerPort = port;
+						await this.plugin.saveSettings();
+					}
+				}))
+			.addExtraButton((button) => button
+				.setIcon('reset')
+				.setTooltip('Restart server with new port')
+				.onClick(async () => {
+					// Restart the HTTP server with new port
+					this.plugin.restartHttpServer();
+					new Notice(`HTTP server restarted on port ${this.plugin.settings.httpServerPort}`);
 				}));
 
 		// Add information section

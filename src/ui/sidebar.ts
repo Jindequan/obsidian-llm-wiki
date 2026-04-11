@@ -937,7 +937,7 @@ export class SidebarView extends ItemView {
 	private async handleProcess() {
 		const input = this.inputEl.value.trim();
 		if (!input) {
-			new Notice('Enter a URL or file path.');
+			new Notice('Enter a URL, file path, or paste text content.');
 			this.inputEl.focus();
 			return;
 		}
@@ -965,8 +965,11 @@ export class SidebarView extends ItemView {
 		try {
 			if (this.isUrl(input)) {
 				await this.processUrlContent(input, this.currentProcess.signal);
-			} else {
+			} else if (this.isFilePath(input)) {
 				await this.processFileContent(input, this.currentProcess.signal);
+			} else {
+				// Treat as text content
+				await this.processTextContent(input, this.currentProcess.signal);
 			}
 		} catch (error: any) {
 			if (error.name !== 'AbortError') {
@@ -1074,6 +1077,40 @@ export class SidebarView extends ItemView {
 		} catch {
 			return false;
 		}
+	}
+
+	private isFilePath(text: string): boolean {
+		// Check if it looks like a file path
+		return text.startsWith('/') ||
+		       text.startsWith('./') ||
+		       text.startsWith('../') ||
+		       /^[a-zA-Z]:/.test(text) || // Windows path
+		       text.endsWith('.md') ||
+		       text.endsWith('.txt') ||
+		       text.endsWith('.pdf');
+	}
+
+	private async processTextContent(text: string, signal: AbortSignal) {
+		this.log('Processing text content...', 'info');
+
+		const content = {
+			type: 'text' as const,
+			source: 'clipboard',
+			title: 'Clipboard Content',
+			content: text,
+			metadata: {
+				extractedAt: new Date().toISOString(),
+				wordCount: text.split(/\s+/).length,
+			},
+		};
+
+		if (signal.aborted) {
+			throw new Error('Cancelled');
+		}
+
+		this.log(`Content length: ${content.content.length} characters`, 'info');
+
+		await this.generateWiki(content, signal);
 	}
 
 	private async pasteFromClipboard() {
@@ -1241,21 +1278,22 @@ export class SidebarView extends ItemView {
 	}
 
 	private async openArtifactFile(path: string) {
-		const normalizedPath = path.replace(/^\.?\//, '');
-		const file = this.app.vault.getAbstractFileByPath(normalizedPath);
+		const resolvedPath = this.resolveArtifactVaultPath(path);
+		const file = this.app.vault.getAbstractFileByPath(resolvedPath);
 		if (file instanceof TFile) {
 			const leaf = this.app.workspace.getLeaf(true);
 			await leaf.openFile(file);
 			return;
 		}
 
-		await this.openArtifactDirectory(this.getParentPath(normalizedPath));
+		await this.openArtifactDirectory(this.getParentPath(resolvedPath));
 	}
 
 	private async openArtifactDirectory(path: string) {
-		const absolutePath = this.toAbsoluteVaultPath(path);
+		const resolvedPath = this.resolveArtifactVaultPath(path);
+		const absolutePath = this.toAbsoluteVaultPath(resolvedPath);
 		if (!absolutePath) {
-			new Notice(`Could not locate folder: ${path}`);
+			new Notice(`Could not locate folder: ${resolvedPath}`);
 			return;
 		}
 
@@ -1276,6 +1314,25 @@ export class SidebarView extends ItemView {
 		} catch (error: any) {
 			new Notice(`Failed to open folder: ${error.message}`);
 		}
+	}
+
+	private resolveArtifactVaultPath(path: string): string {
+		const normalizedPath = path.replace(/^\.?\//, '').replace(/^\/+/, '');
+		const normalizedWikiPath = this.plugin.settings.wikiPath.replace(/^\.?\//, '').replace(/^\/+/, '').replace(/\/+$/, '');
+
+		if (!normalizedPath || !normalizedWikiPath) {
+			return normalizedPath || normalizedWikiPath;
+		}
+
+		if (normalizedPath === normalizedWikiPath || normalizedPath.startsWith(`${normalizedWikiPath}/`)) {
+			return normalizedPath;
+		}
+
+		if (this.app.vault.getAbstractFileByPath(normalizedPath)) {
+			return normalizedPath;
+		}
+
+		return `${normalizedWikiPath}/${normalizedPath}`;
 	}
 
 	private toAbsoluteVaultPath(path: string): string | null {

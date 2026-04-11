@@ -504,26 +504,27 @@ Malformed output ends`;
 			return normalizedPath.slice(this.wikiPath.length + 1);
 		}
 
-		if (this.wikiPath === 'wiki' && normalizedPath.startsWith('wiki/')) {
-			return normalizedPath.slice('wiki/'.length);
-		}
-
 		return normalizedPath;
 	}
 
 	private normalizeLinkPath(path: string): string {
-		return this.normalizePagePath(path).replace(/\.md$/i, '');
+		// For wiki links, keep the wiki/ prefix to use absolute paths from vault root
+		const normalized = path.replace(/\\/g, '/').replace(/^\.?\//, '');
+
+		// If path doesn't start with wikiPath, add it
+		if (!normalized.startsWith(`${this.wikiPath}/`)) {
+			return `${this.wikiPath}/${normalized.replace(/\.md$/i, '')}`;
+		}
+
+		return normalized.replace(/\.md$/i, '');
 	}
 
 	private getRawRootPath(): string {
 		const normalizedWikiPath = this.wikiPath.replace(/\/+$/g, '');
-		const segments = normalizedWikiPath.split('/').filter(Boolean);
-		if (!segments.length) {
+		if (!normalizedWikiPath) {
 			return 'raw';
 		}
-
-		segments[segments.length - 1] = 'raw';
-		return segments.join('/');
+		return `${normalizedWikiPath}/raw`;
 	}
 
 	private getVaultBasePath(): string | null {
@@ -818,7 +819,8 @@ Malformed output ends`;
 	}
 
 	private pathToWikiLink(path: string): string {
-		return this.normalizeLinkPath(path).split('/').pop() || this.normalizeLinkPath(path);
+		// Return the full wiki path with wiki/ prefix for correct linking
+		return this.normalizeLinkPath(path);
 	}
 
 	private toWikiLinkTarget(path: string): string {
