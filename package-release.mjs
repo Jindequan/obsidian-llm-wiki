@@ -12,6 +12,7 @@ const pluginId = manifest.id;
 const buildMainPath = path.join(rootDir, '.build', 'main.js');
 const manifestPath = path.join(rootDir, 'manifest.json');
 const versionsPath = path.join(rootDir, 'versions.json');
+const stylesPath = path.join(rootDir, 'styles.css');
 const releaseDir = path.join(rootDir, '.release', version);
 const archivePath = path.join(rootDir, '.release', `${pluginId}-${version}.zip`);
 
@@ -23,6 +24,9 @@ fs.mkdirSync(releaseDir, { recursive: true });
 fs.copyFileSync(buildMainPath, path.join(releaseDir, 'main.js'));
 fs.copyFileSync(manifestPath, path.join(releaseDir, 'manifest.json'));
 fs.copyFileSync(versionsPath, path.join(releaseDir, 'versions.json'));
+if (fs.existsSync(stylesPath)) {
+	fs.copyFileSync(stylesPath, path.join(releaseDir, 'styles.css'));
+}
 
 if (fs.existsSync(archivePath)) {
 	fs.rmSync(archivePath);
@@ -36,9 +40,10 @@ execFileSync(
 		path.join(releaseDir, 'main.js'),
 		path.join(releaseDir, 'manifest.json'),
 		path.join(releaseDir, 'versions.json'),
+		...(fs.existsSync(stylesPath) ? [path.join(releaseDir, 'styles.css')] : []),
 	],
 	{ stdio: 'inherit' }
 );
 
-console.log(`Prepared release assets in ${releaseDir}`);
-console.log(`Prepared release archive at ${archivePath}`);
+process.stdout.write(`Prepared release assets in ${releaseDir}\n`);
+process.stdout.write(`Prepared release archive at ${archivePath}\n`);

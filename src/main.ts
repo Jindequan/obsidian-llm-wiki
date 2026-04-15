@@ -1,8 +1,10 @@
-import { App, Plugin, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { App, Modal, Notice, Plugin, TFile, WorkspaceLeaf } from 'obsidian';
 import { LLMWikiSettingTab } from './settings';
 import { SidebarView, VIEW_TYPE_SIDEBAR } from './ui/sidebar';
 import { ProviderType } from './providers';
 import { HttpServer } from './http-server';
+import { getDesktopFilePath } from './utils/desktop';
+import { encodeVaultFileSource } from './utils/file-source';
 
 export interface LLMWikiSettings {
 	aiProvider: ProviderType;
@@ -28,7 +30,6 @@ export const DEFAULT_SETTINGS: LLMWikiSettings = {
 
 export default class LLMWikiPlugin extends Plugin {
 	settings: LLMWikiSettings;
-	sidebarView: SidebarView | null = null;
 	private httpServer: HttpServer | null = null;
 
 	async onload() {
@@ -41,40 +42,45 @@ export default class LLMWikiPlugin extends Plugin {
 		// Register sidebar view
 		this.registerView(
 			VIEW_TYPE_SIDEBAR,
-			(leaf: WorkspaceLeaf) => {
-				this.sidebarView = new SidebarView(leaf, this);
-				return this.sidebarView;
-			}
+			(leaf: WorkspaceLeaf) => new SidebarView(leaf, this)
 		);
 
 		// Add ribbon icon
 		this.addRibbonIcon('brain', 'LLM Wiki', () => {
-			this.activateView();
+			void this.activateView();
 		});
 
 		// Register commands
 		this.addCommand({
-			id: 'open-llm-wiki-sidebar',
-			name: 'Open LLM Wiki sidebar',
-			callback: () => this.activateView(),
+			id: 'open-sidebar',
+			name: 'Open sidebar',
+			callback: () => {
+				void this.activateView();
+			},
 		});
 
 		this.addCommand({
 			id: 'process-url',
-			name: 'Process URL to Wiki',
-			callback: () => this.processUrl(),
+			name: 'Process URL',
+			callback: () => {
+				void this.processUrl();
+			},
 		});
 
 		this.addCommand({
 			id: 'process-file',
-			name: 'Process File to Wiki',
-			callback: () => this.processFile(),
+			name: 'Process file',
+			callback: () => {
+				void this.processFile();
+			},
 		});
 
 		this.addCommand({
-			id: 'wiki-lint',
-			name: 'Wiki health check',
-			callback: () => this.wikiLint(),
+			id: 'run-wiki-health-check',
+			name: 'Run wiki health check',
+			callback: () => {
+				void this.wikiLint();
+			},
 		});
 
 		// Add setting tab
@@ -89,7 +95,7 @@ export default class LLMWikiPlugin extends Plugin {
 		}
 	}
 
-	restartHttpServer() {
+	async restartHttpServer() {
 		// Stop existing server
 		if (this.httpServer) {
 			this.httpServer.stop();
@@ -97,7 +103,7 @@ export default class LLMWikiPlugin extends Plugin {
 
 		// Start new server with new port
 		this.httpServer = new HttpServer(this);
-		this.httpServer.start();
+		await this.httpServer.start();
 	}
 
 	async loadSettings() {
@@ -124,6 +130,12 @@ export default class LLMWikiPlugin extends Plugin {
 		workspace.revealLeaf(leaf);
 	}
 
+	getSidebarView(): SidebarView | null {
+		const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_SIDEBAR)[0];
+		const view = leaf?.view;
+		return view instanceof SidebarView ? view : null;
+	}
+
 	async processUrl() {
 		const url = await this.inputUrl();
 		if (!url) return;
@@ -133,11 +145,13 @@ export default class LLMWikiPlugin extends Plugin {
 		try {
 			await this.activateView();
 
-			if (this.sidebarView) {
-				this.sidebarView.processUrl(url);
+			const sidebarView = this.getSidebarView();
+			if (sidebarView) {
+				await sidebarView.processUrl(url);
 			}
-		} catch (error: any) {
-			new Notice(`Error: ${error.message}`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			new Notice(`Error: ${message}`);
 		}
 	}
 
@@ -150,11 +164,13 @@ export default class LLMWikiPlugin extends Plugin {
 		try {
 			await this.activateView();
 
-			if (this.sidebarView) {
-				this.sidebarView.processFile(file.path);
+			const sidebarView = this.getSidebarView();
+			if (sidebarView) {
+				await sidebarView.processFile(file);
 			}
-		} catch (error: any) {
-			new Notice(`Error: ${error.message}`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			new Notice(`Error: ${message}`);
 		}
 	}
 
@@ -164,61 +180,33 @@ export default class LLMWikiPlugin extends Plugin {
 		try {
 			await this.activateView();
 
-			if (this.sidebarView) {
-				this.sidebarView.runWikiLint();
+			const sidebarView = this.getSidebarView();
+			if (sidebarView) {
+				sidebarView.runWikiLint();
 			}
-		} catch (error: any) {
-			new Notice(`Error: ${error.message}`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			new Notice(`Error: ${message}`);
 		}
 	}
 
-	private async inputUrl(): Promise<string | null> {
+	private inputUrl(): Promise<string | null> {
 		return new Promise((resolve) => {
 			const modal = new UrlInputModal(this.app, (url) => resolve(url));
 			modal.open();
 		});
 	}
 
-	private async inputFile(): Promise<TFile | null> {
+	private inputFile(): Promise<string | null> {
 		// Use Obsidian's native file suggestion modal
 		return new Promise((resolve) => {
 			const inputEl = createEl('input', { type: 'file' });
 			inputEl.accept = '.md,.pdf,.txt';
-			inputEl.style.display = 'none';
+			inputEl.addClass('llm-wiki-hidden-file-input');
 			document.body.appendChild(inputEl);
 
-			inputEl.onchange = async () => {
-				const file = inputEl.files?.[0];
-				if (file) {
-					// For desktop app, try to get the full path
-					try {
-						const electron = (window as Window & {
-							require?: (module: string) => {
-								webUtils?: {
-									getPathForFile?: (target: File) => string;
-								};
-							};
-						}).require?.('electron');
-
-						const pathFromWebUtils = electron?.webUtils?.getPathForFile?.(file);
-						if (pathFromWebUtils) {
-							document.body.removeChild(inputEl);
-							resolve(this.app.vault.getAbstractFileByPath(pathFromWebUtils) as TFile || null);
-							return;
-						}
-					} catch {
-						// Fall back to vault-relative path
-					}
-
-					// Try to find file in vault by name
-					const files = this.app.vault.getFiles();
-					const matched = files.find(f => f.name === file.name);
-					document.body.removeChild(inputEl);
-					resolve(matched as TFile || null);
-					return;
-				}
-				document.body.removeChild(inputEl);
-				resolve(null);
+			inputEl.onchange = () => {
+				void this.handleFileInputChange(inputEl, resolve);
 			};
 
 			inputEl.oncancel = () => {
@@ -229,31 +217,110 @@ export default class LLMWikiPlugin extends Plugin {
 			inputEl.click();
 		});
 	}
+
+	private async handleFileInputChange(
+		inputEl: HTMLInputElement,
+		resolve: (value: string | null) => void
+	): Promise<void> {
+		const cleanup = () => {
+			if (inputEl.parentElement) {
+				inputEl.remove();
+			}
+		};
+
+		const selectedFile = inputEl.files?.[0];
+		if (!selectedFile) {
+			cleanup();
+			resolve(null);
+			return;
+		}
+
+		const pathFromWebUtils = getDesktopFilePath(selectedFile);
+		const matchedByAbsolutePath = pathFromWebUtils ? this.findVaultFileByAbsolutePath(pathFromWebUtils) : null;
+		if (matchedByAbsolutePath) {
+			cleanup();
+			resolve(encodeVaultFileSource(matchedByAbsolutePath.path));
+			return;
+		}
+
+		const matchedByName = this.findVaultFileByName(selectedFile.name);
+		if (matchedByName === 'ambiguous') {
+			cleanup();
+			new Notice('Multiple vault files have the same name. Paste the full local path or rename the file and try again.');
+			resolve(null);
+			return;
+		}
+
+		if (matchedByName) {
+			cleanup();
+			resolve(encodeVaultFileSource(matchedByName.path));
+			return;
+		}
+
+		if (pathFromWebUtils) {
+			cleanup();
+			resolve(pathFromWebUtils);
+			return;
+		}
+
+		cleanup();
+		new Notice('Unable to resolve the selected file path in this environment.');
+		resolve(null);
+	}
+
+	private findVaultFileByAbsolutePath(absolutePath: string): TFile | null {
+		const normalizedTargetPath = this.normalizeSystemPath(absolutePath);
+
+		return this.app.vault.getFiles().find((file) => {
+			const resolvedPath = this.toAbsoluteVaultPath(file);
+			return resolvedPath ? this.normalizeSystemPath(resolvedPath) === normalizedTargetPath : false;
+		}) ?? null;
+	}
+
+	private findVaultFileByName(fileName: string): TFile | 'ambiguous' | null {
+		const matches = this.app.vault.getFiles().filter((file) => file.name === fileName);
+		if (matches.length > 1) {
+			return 'ambiguous';
+		}
+
+		return matches[0] ?? null;
+	}
+
+	private toAbsoluteVaultPath(file: TFile): string | null {
+		const adapter = this.app.vault.adapter as typeof this.app.vault.adapter & {
+			basePath?: string;
+			getBasePath?: () => string;
+		};
+		const basePath = adapter.getBasePath?.() || adapter.basePath;
+		return basePath ? `${basePath}/${file.path}` : null;
+	}
+
+	private normalizeSystemPath(path: string): string {
+		return path.replace(/\\/g, '/');
+	}
 }
 
 // Simple URL input modal
-class UrlInputModal {
-	private modalEl: HTMLElement;
-	private onSubmit: (url: string) => void;
+class UrlInputModal extends Modal {
+	private readonly onSubmit: (url: string) => void;
 
 	constructor(_app: App, onSubmit: (url: string) => void) {
+		super(_app);
 		this.onSubmit = onSubmit;
+	}
 
-		this.modalEl = document.createElement('div');
-		this.modalEl.className = 'modal-container';
+	onOpen() {
+		const { contentEl } = this;
+		contentEl.empty();
 
-		const modal = this.modalEl.createEl('div', { cls: 'modal' });
-		modal.createEl('div', { cls: 'modal-title', text: 'Enter URL' });
-
-		const content = modal.createEl('div', { cls: 'modal-content' });
-		const input = content.createEl('input', {
+		contentEl.createEl('div', { cls: 'modal-title', text: 'Enter a URL' });
+		const input = contentEl.createEl('input', {
 			type: 'url',
+			cls: 'llm-wiki-modal-input',
 			placeholder: 'https://...',
 		});
-		input.style.width = '100%';
-		input.style.padding = '8px';
 
-		const btnContainer = modal.createEl('div', { cls: 'modal-button-container' });
+		const btnContainer = contentEl.createEl('div', { cls: 'modal-button-container' });
 		const submitBtn = btnContainer.createEl('button', {
 			cls: 'mod-cta',
 			text: 'Process'
@@ -274,13 +341,5 @@ class UrlInputModal {
 				this.close();
 			}
 		});
-	}
-
-	open() {
-		document.body.appendChild(this.modalEl);
-	}
-
-	close() {
-		this.modalEl.remove();
 	}
 }

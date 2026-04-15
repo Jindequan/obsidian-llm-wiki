@@ -23,11 +23,10 @@ export function createProvider(
 		case 'aliqwen':
 			return new AliQwenProvider(apiKey, model);
 		case 'custom':
-			// Custom provider with user-provided base URL
 			if (!baseUrl) {
 				throw new Error('Custom provider requires baseUrl');
 			}
-			return new OpenAIProvider(apiKey, model); // Use OpenAI-compatible format
+			return new OpenAIProvider(apiKey, model, baseUrl);
 		default:
 			throw new Error(`Unknown provider type: ${type}`);
 	}

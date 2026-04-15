@@ -1,5 +1,26 @@
 import LLMWikiPlugin from './main';
 
+interface RestApiPlugin {
+	registerEndpoint(config: {
+		namespace: string;
+		namespaceId: string;
+		endpoint: string;
+		method: 'GET' | 'POST';
+		description: string;
+		handler: (body?: unknown) => Promise<Record<string, unknown>>;
+	}): Promise<void>;
+}
+
+interface RestApiRequestBody {
+	url?: unknown;
+}
+
+interface AppWithPlugins {
+	plugins: {
+		plugins: Record<string, unknown>;
+	};
+}
+
 /**
  * REST API handler for LLM Wiki plugin
  * Integrates with obsidian-local-rest-api to expose endpoints
@@ -11,8 +32,9 @@ export class RestApiHandler {
 	 * Register REST API endpoints with obsidian-local-rest-api
 	 */
 	async registerEndpoints() {
-		// @ts-ignore - obsidian-local-rest-api is not in the type definitions
-		const restApi = this.plugin.app.plugins.plugins['obsidian-local-rest-api'];
+		const appWithPlugins = this.plugin.app as typeof this.plugin.app & AppWithPlugins;
+		const pluginsRegistry = appWithPlugins.plugins.plugins;
+		const restApi = pluginsRegistry['obsidian-local-rest-api'] as RestApiPlugin | undefined;
 
 		if (!restApi) {
 			return;
@@ -25,38 +47,39 @@ export class RestApiHandler {
 			endpoint: 'process-url',
 			method: 'POST',
 			description: 'Process a URL and generate wiki pages',
-			handler: async (body: any) => {
+			handler: (body?: unknown) => {
 				try {
-					const { url } = body;
+					const { url } = (body as RestApiRequestBody) ?? {};
 
 					if (!url || typeof url !== 'string') {
-						return {
+						return Promise.resolve({
 							success: false,
 							error: 'URL is required and must be a string',
-						};
+						});
 					}
 
 					// Process the URL using the sidebar view
-					const sidebar = this.plugin.sidebarView;
+					const sidebar = this.plugin.getSidebarView();
 					if (!sidebar) {
-						return {
+						return Promise.resolve({
 							success: false,
 							error: 'Sidebar view not available. Please open the LLM Wiki sidebar first.',
-						};
+						});
 					}
 
 					// Start processing asynchronously
-					sidebar.processUrl(url);
+					void sidebar.processUrl(url);
 
-					return {
+					return Promise.resolve({
 						success: true,
 						message: 'URL processing started. Check Obsidian for progress.',
-					};
-				} catch (error: any) {
-					return {
+					});
+				} catch (error) {
+					const message = error instanceof Error ? error.message : 'Unknown error';
+					return Promise.resolve({
 						success: false,
-						error: error.message || 'Unknown error',
-					};
+						error: message,
+					});
 				}
 			},
 		});
@@ -68,22 +91,17 @@ export class RestApiHandler {
 			endpoint: 'status',
 			method: 'GET',
 			description: 'Check LLM Wiki plugin status',
-			handler: async () => {
-				const hasApiKey = !!this.plugin.settings.apiKey;
-				const sidebarOpen = !!this.plugin.sidebarView;
-
-				return {
-					success: true,
-					data: {
-						enabled: true,
-						apiKeyConfigured: hasApiKey,
-						sidebarOpen,
-						provider: this.plugin.settings.aiProvider,
-						model: this.plugin.settings.model,
-						wikiPath: this.plugin.settings.wikiPath,
-					},
-				};
-			},
+			handler: () => Promise.resolve({
+				success: true,
+				data: {
+					enabled: true,
+					apiKeyConfigured: !!this.plugin.settings.apiKey,
+					sidebarOpen: !!this.plugin.getSidebarView(),
+					provider: this.plugin.settings.aiProvider,
+					model: this.plugin.settings.model,
+					wikiPath: this.plugin.settings.wikiPath,
+				},
+			}),
 		});
 
 		// Register endpoint to get plugin info
@@ -93,22 +111,20 @@ export class RestApiHandler {
 			endpoint: 'info',
 			method: 'GET',
 			description: 'Get LLM Wiki plugin information',
-			handler: async () => {
-				return {
-					success: true,
-					data: {
-						name: 'LLM Wiki',
-						version: '0.1.1',
-						description: 'Turn URLs, PDFs, and files into structured wiki pages with AI.',
-						settings: {
-							aiProvider: this.plugin.settings.aiProvider,
-							model: this.plugin.settings.model,
-							wikiPath: this.plugin.settings.wikiPath,
-							enableSidebar: this.plugin.settings.enableSidebar,
-						},
+			handler: () => Promise.resolve({
+				success: true,
+				data: {
+					name: 'LLM Wiki',
+					version: this.plugin.manifest.version,
+					description: 'Turn URLs, PDFs, and files into structured wiki pages with AI.',
+					settings: {
+						aiProvider: this.plugin.settings.aiProvider,
+						model: this.plugin.settings.model,
+						wikiPath: this.plugin.settings.wikiPath,
+						enableSidebar: this.plugin.settings.enableSidebar,
 					},
-				};
-			},
+				},
+			}),
 		});
 
 	}
@@ -116,9 +132,10 @@ export class RestApiHandler {
 	/**
 	 * Unregister REST API endpoints
 	 */
-	async unregisterEndpoints() {
-		// @ts-ignore
-		const restApi = this.plugin.app.plugins.plugins['obsidian-local-rest-api'];
+	unregisterEndpoints(): void {
+		const appWithPlugins = this.plugin.app as typeof this.plugin.app & AppWithPlugins;
+		const pluginsRegistry = appWithPlugins.plugins.plugins;
+		const restApi = pluginsRegistry['obsidian-local-rest-api'] as RestApiPlugin | undefined;
 
 		if (!restApi) {
 			return;

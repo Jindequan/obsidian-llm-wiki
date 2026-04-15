@@ -6,8 +6,6 @@ export function generateSourcePage(
 	date?: string
 ): string {
 	const now = new Date().toISOString().split('T')[0];
-	const slug = title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
-	const timestamp = Date.now();
 
 	return `---
 type: source
@@ -44,10 +42,9 @@ ${content}
 export function generateEntityPage(
 	name: string,
 	description: string,
-	attributes?: Record<string, any>
+	attributes?: Record<string, string | number | boolean | null>
 ): string {
 	const now = new Date().toISOString().split('T')[0];
-	const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
 
 	return `---
 type: entity
@@ -84,7 +81,6 @@ export function generateConceptPage(
 	details?: string
 ): string {
 	const now = new Date().toISOString().split('T')[0];
-	const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
 
 	return `---
 type: concept

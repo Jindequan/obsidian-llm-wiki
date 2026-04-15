@@ -5,7 +5,7 @@ export interface ExtractedContent {
 	author?: string;
 	date?: string;
 	content: string;
-	metadata?: Record<string, any>;
+	metadata?: Record<string, unknown>;
 }
 
 export interface ContentProcessor {

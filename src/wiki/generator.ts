@@ -76,7 +76,7 @@ export class WikiGenerator {
 		const schema = this.customSchema || DEFAULT_LLM_WIKI_SCHEMA;
 
 		// Get existing wiki pages for context
-		const existingPages = await this.getExistingPages();
+		const existingPages = this.getExistingPages();
 
 		const systemPrompt = this.buildSystemPrompt(schema);
 		const userPrompt = this.buildUserPrompt(content, existingPages);
@@ -454,7 +454,7 @@ Malformed output ends`;
 	}
 
 	private normalizePages(
-		rawPages: ParsedWikiGenerationResult['entityPages'] | ParsedWikiGenerationResult['conceptPages'],
+		rawPages: ParsedWikiGenerationResult['entityPages'],
 		fieldName: 'entityPages' | 'conceptPages'
 	): WikiPage[] {
 		if (rawPages == null) {
@@ -864,7 +864,7 @@ Malformed output ends`;
 			.map((page) => `${page.action}: ${page.path}`);
 	}
 
-	private async getExistingPages(): Promise<string[]> {
+	private getExistingPages(): string[] {
 		return this.app.vault
 			.getMarkdownFiles()
 			.filter((file) => file.path.startsWith(`${this.wikiPath}/`) && !/\/(index|log)\.md$/i.test(file.path))
@@ -993,7 +993,7 @@ Malformed output ends`;
 			return;
 		}
 
-		const existingFile = this.app.vault.getAbstractFileByPath(rawDocument.path) as TFile;
+		const existingFile = this.getFileByPath(rawDocument.path);
 		const directory = rawDocument.path.split('/').slice(0, -1).join('/');
 		if (directory && !this.app.vault.getAbstractFileByPath(directory)) {
 			await this.ensureFolder(directory);
@@ -1017,7 +1017,7 @@ Malformed output ends`;
 		}
 
 		const path = `${this.wikiPath}/${page.path}`;
-		const existingFile = this.app.vault.getAbstractFileByPath(path) as TFile;
+		const existingFile = this.getFileByPath(path);
 		const directory = path.split('/').slice(0, -1).join('/');
 
 		if (!this.app.vault.getAbstractFileByPath(directory)) {
@@ -1067,13 +1067,11 @@ Malformed output ends`;
 			}
 
 			const sourcePath = `${this.wikiPath}/${write.path}`;
-			const sourceFile = this.app.vault.getAbstractFileByPath(sourcePath) as TFile;
+			const sourceFile = this.getFileByPath(sourcePath);
 			if (!sourceFile) {
 				continue;
 			}
 
-			// Use MetadataCache to get links more reliably
-			const metadata = this.app.metadataCache.getFileCache(sourceFile);
 			const connectionLinks = this.extractLinksFromConnectionsSection(await this.app.vault.read(sourceFile));
 
 			for (const connectionLink of connectionLinks) {
@@ -1082,7 +1080,7 @@ Malformed output ends`;
 					continue;
 				}
 
-				const targetFile = this.app.vault.getAbstractFileByPath(`${this.wikiPath}/${targetRelativePath}`) as TFile;
+				const targetFile = this.getFileByPath(`${this.wikiPath}/${targetRelativePath}`);
 				if (!targetFile) {
 					continue;
 				}
@@ -1121,7 +1119,7 @@ Malformed output ends`;
 
 		for (const line of lines) {
 			// Match list items with wiki links: - [[Page Name]] or - [[Page|Alias]]
-			const match = line.match(/^[\s]*[\-\*]\s*\[\[([^\]|#]+)(?:#[^[\]]+)?(?:\|[^\]]+)?\]\]/);
+			const match = line.match(/^\s*[-*]\s*\[\[([^\]|#]+)(?:#[^[\]]+)?(?:\|[^\]]+)?\]\]/);
 			if (match) {
 				links.push(match[1].trim());
 			}
@@ -1132,7 +1130,7 @@ Malformed output ends`;
 
 	private async updateIndex(update: WikiGenerationResult['indexUpdate']): Promise<void> {
 		const indexPath = `${this.wikiPath}/index.md`;
-		const existingFile = this.app.vault.getAbstractFileByPath(indexPath) as TFile;
+		const existingFile = this.getFileByPath(indexPath);
 		const content = await this.buildIndexContent(update);
 
 		if (existingFile) {
@@ -1144,7 +1142,7 @@ Malformed output ends`;
 
 	private async updateLog(entry: WikiGenerationResult['logEntry'], writes: PageWriteResult[]): Promise<void> {
 		const logPath = `${this.wikiPath}/log.md`;
-		const existingFile = this.app.vault.getAbstractFileByPath(logPath) as TFile;
+		const existingFile = this.getFileByPath(logPath);
 		const previousContent = existingFile ? await this.app.vault.read(existingFile) : '';
 		const bodyWithoutHeading = previousContent.replace(/^# Wiki Log\s*/, '').trim();
 		const logEntry = this.renderLogEntry(entry, writes);
@@ -1158,5 +1156,10 @@ Malformed output ends`;
 		} else {
 			await this.app.vault.create(logPath, nextContent);
 		}
+	}
+
+	private getFileByPath(path: string): TFile | null {
+		const file = this.app.vault.getAbstractFileByPath(path);
+		return file instanceof TFile ? file : null;
 	}
 }

@@ -1,6 +1,6 @@
-import { readFileSync } from 'fs';
 import { ContentProcessor, ExtractedContent } from './base';
 import { pdfToMarkdown } from '../parsers/pdf-parse';
+import { readLocalTextFile } from '../utils/desktop';
 
 export class FileProcessor implements ContentProcessor {
 	type = 'file' as const;
@@ -10,12 +10,12 @@ export class FileProcessor implements ContentProcessor {
 
 		switch (ext) {
 			case 'pdf':
-				return await this.extractPDF(filePath);
+				return this.extractPDF(filePath);
 			case 'md':
 			case 'markdown':
-				return await this.extractMarkdown(filePath);
+				return this.extractMarkdown(filePath);
 			case 'txt':
-				return await this.extractText(filePath);
+				return this.extractText(filePath);
 			default:
 				throw new Error(`Unsupported file type: ${ext}`);
 		}
@@ -37,8 +37,8 @@ export class FileProcessor implements ContentProcessor {
 		};
 	}
 
-	private async extractMarkdown(filePath: string): Promise<ExtractedContent> {
-		const content = readFileSync(filePath, 'utf-8');
+	private extractMarkdown(filePath: string): ExtractedContent {
+		const content = readLocalTextFile(filePath);
 
 		// Extract title from first heading or filename
 		const titleMatch = content.match(/^#\s+(.+)$/m);
@@ -57,8 +57,8 @@ export class FileProcessor implements ContentProcessor {
 		};
 	}
 
-	private async extractText(filePath: string): Promise<ExtractedContent> {
-		const content = readFileSync(filePath, 'utf-8');
+	private extractText(filePath: string): ExtractedContent {
+		const content = readLocalTextFile(filePath);
 		const title = filePath.split('/').pop() || 'Untitled';
 
 		return {

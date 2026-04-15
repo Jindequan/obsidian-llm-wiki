@@ -146,11 +146,12 @@ export async function urlToMarkdown(url: string): Promise<{
 			author,
 			date,
 		};
-	} catch (error: any) {
-		if (error?.status) {
+	} catch (error: unknown) {
+		if (typeof error === 'object' && error !== null && 'status' in error && typeof error.status === 'number') {
 			throw new Error(`HTTP ${error.status}`);
 		}
 
-		throw new Error(error.message || 'Unknown error');
+		const message = error instanceof Error ? error.message : 'Unknown error';
+		throw new Error(message);
 	}
 }

@@ -1,5 +1,13 @@
-import axios from 'axios';
-import { AIProvider, GenerateOptions, ProviderError, PROVIDER_BASE_URLS } from './base';
+import { AIProvider, GenerateOptions, PROVIDER_BASE_URLS } from './base';
+import { buildChatMessages, generateSingleChunkStream, postJson } from './http';
+
+type ZAIResponse = {
+	choices?: Array<{
+		message?: {
+			content?: string;
+		};
+	}>;
+};
 
 export class ZAIProvider implements AIProvider {
 	name = 'Z.AI';
@@ -27,110 +35,29 @@ export class ZAIProvider implements AIProvider {
 
 	async generate(prompt: string, options?: GenerateOptions): Promise<string> {
 		const { temperature = 0.7, maxTokens = 4096, system, signal } = options || {};
+		const response = await postJson<ZAIResponse>(
+			this.name,
+			`${this.baseUrl}/chat/completions`,
+			{ Authorization: `Bearer ${this.apiKey}` },
+			{
+				model: this.model,
+				messages: buildChatMessages(prompt, system),
+				max_tokens: maxTokens,
+				temperature,
+				stream: false,
+			},
+			signal
+		);
 
-		const messages: any[] = [];
-
-		if (system) {
-			messages.push({ role: 'system', content: system });
+		const content = response.choices?.[0]?.message?.content;
+		if (!content) {
+			throw new Error('Z.AI returned an empty response.');
 		}
 
-		messages.push({ role: 'user', content: prompt });
-
-		try {
-			const response = await axios.post(
-				`${this.baseUrl}/chat/completions`,
-				{
-					model: this.model,
-					messages,
-					max_tokens: maxTokens,
-					temperature,
-					stream: false,
-				},
-				{
-					headers: {
-						'Authorization': `Bearer ${this.apiKey}`,
-						'Content-Type': 'application/json',
-					},
-					signal: signal as any,
-				}
-			);
-
-			return response.data.choices[0].message.content;
-		} catch (error) {
-			if (axios.isAxiosError(error)) {
-				const status = error.response?.status;
-				const message = error.response?.data?.error?.message || error.message;
-				throw new ProviderError(this.name, message, String(status));
-			}
-			throw error;
-		}
+		return content;
 	}
 
 	async *generateStream(prompt: string, options?: GenerateOptions): AsyncGenerator<string, void, unknown> {
-		const { temperature = 0.7, maxTokens = 4096, system, onProgress, signal } = options || {};
-
-		const messages: any[] = [];
-
-		if (system) {
-			messages.push({ role: 'system', content: system });
-		}
-
-		messages.push({ role: 'user', content: prompt });
-
-		try {
-			const response = await axios.post(
-				`${this.baseUrl}/chat/completions`,
-				{
-					model: this.model,
-					messages,
-					max_tokens: maxTokens,
-					temperature,
-					stream: true,
-				},
-				{
-					headers: {
-						'Authorization': `Bearer ${this.apiKey}`,
-						'Content-Type': 'application/json',
-					},
-					responseType: 'stream',
-					signal: signal as any,
-				}
-			);
-
-			const stream = response.data;
-
-			for await (const chunk of stream) {
-				if (signal?.aborted) break;
-
-				const lines = chunk.toString().split('\n').filter((line: string) => line.trim());
-
-				for (const line of lines) {
-					if (line.startsWith('data: ')) {
-						const data = line.slice(6);
-
-						if (data === '[DONE]') continue;
-
-						try {
-							const parsed = JSON.parse(data);
-							const delta = parsed.choices[0]?.delta?.content;
-
-							if (delta) {
-								onProgress?.(delta);
-								yield delta;
-							}
-						} catch {
-							// Skip invalid JSON
-						}
-					}
-				}
-			}
-		} catch (error) {
-			if (axios.isAxiosError(error)) {
-				const status = error.response?.status;
-				const message = error.response?.data?.error?.message || error.message;
-				throw new ProviderError(this.name, message, String(status));
-			}
-			throw error;
-		}
+		yield* generateSingleChunkStream(this.generate(prompt, options), options?.onProgress);
 	}
 }

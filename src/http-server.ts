@@ -1,12 +1,45 @@
 import { Notice } from 'obsidian';
 import LLMWikiPlugin from './main';
 
+interface HttpModule {
+	createServer(handler: (req: unknown, res: unknown) => void): NodeHttpServer;
+}
+
+interface NodeHttpServer {
+	listen(port: number, callback?: () => void): void;
+	close(callback?: () => void): void;
+	on(event: 'error', callback: (error: NodeJS.ErrnoException) => void): void;
+}
+
+interface IncomingRequest {
+	method?: string;
+	url?: string;
+	on(event: 'data', callback: (chunk: Uint8Array | string) => void): void;
+	on(event: 'end', callback: () => void): void;
+	on(event: 'error', callback: (error: Error) => void): void;
+	on(event: 'aborted', callback: () => void): void;
+}
+
+interface ServerResponse {
+	setHeader(name: string, value: string): void;
+	writeHead(status: number, headers?: Record<string, string>): void;
+	end(body?: string): void;
+}
+
+interface ProcessUrlRequestBody {
+	url?: unknown;
+}
+
+interface ProcessTextRequestBody {
+	text?: unknown;
+}
+
 /**
  * Built-in HTTP server for LLM Wiki plugin
  * Runs a simple HTTP server to receive requests from browser extension
  */
 export class HttpServer {
-	private server: any = null;
+	private server: NodeHttpServer | null = null;
 
 	constructor(private plugin: LLMWikiPlugin) {}
 
@@ -14,119 +47,110 @@ export class HttpServer {
 		return this.plugin.settings.httpServerPort || 27124;
 	}
 
-	/**
-	 * Start the HTTP server
-	 */
-	async start() {
+	async start(): Promise<void> {
 		try {
-			// Try to use Node.js http module (available in Electron/Obsidian desktop)
 			const http = await this.importHttpModule();
-
 			if (!http) {
 				new Notice('LLM Wiki: HTTP server not available (mobile/web only)');
 				return;
 			}
 
-			// Create request handler
-			const requestHandler = async (req: any, res: any) => {
-				// Enable CORS
-				res.setHeader('Access-Control-Allow-Origin', '*');
-				res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-				res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-				if (req.method === 'OPTIONS') {
-					res.writeHead(200);
-					res.end();
-					return;
-				}
-
-				// Parse URL path
-				const url = new URL(req.url, `http://localhost:${this.port}`);
-				const pathname = url.pathname;
-
-				// Route handlers
-				if (pathname === '/llm-wiki/status' && req.method === 'GET') {
-					await this.handleStatus(req, res);
-				} else if (pathname === '/llm-wiki/process-url' && req.method === 'POST') {
-					await this.handleProcessUrl(req, res);
-				} else if (pathname === '/llm-wiki/process-text' && req.method === 'POST') {
-					await this.handleProcessText(req, res);
-				} else if (pathname === '/llm-wiki/info' && req.method === 'GET') {
-					await this.handleInfo(req, res);
-				} else {
-					res.writeHead(404);
-					res.end(JSON.stringify({ error: 'Not found' }));
-				}
+			const requestHandler = (req: unknown, res: unknown): void => {
+				void this.routeRequest(req as IncomingRequest, res as ServerResponse);
 			};
 
-			// Start server
 			this.server = http.createServer(requestHandler);
-
 			this.server.listen(this.port, () => {
 				new Notice(`LLM Wiki: HTTP server running on port ${this.port}`);
 			});
 
-			this.server.on('error', (error: any) => {
+			this.server.on('error', (error) => {
 				if (error.code === 'EADDRINUSE') {
 					new Notice(`LLM Wiki: Port ${this.port} already in use`);
-				} else {
-					new Notice(`LLM Wiki: HTTP server error: ${error.message || 'Unknown error'}`);
+					return;
 				}
-			});
 
+				new Notice(`LLM Wiki: HTTP server error: ${error.message || 'Unknown error'}`);
+			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Unknown error';
 			new Notice(`LLM Wiki: Failed to start HTTP server: ${message}`);
 		}
 	}
 
-	/**
-	 * Stop the HTTP server
-	 */
-	stop() {
+	stop(): void {
 		if (this.server) {
 			this.server.close(() => {});
 			this.server = null;
 		}
 	}
 
-	/**
-	 * Try to import Node.js http module
-	 */
-	private async importHttpModule(): Promise<any> {
+	private async importHttpModule(): Promise<HttpModule | null> {
 		try {
-			// Try Electron's require first (Obsidian desktop)
-			if ((window as any).require) {
-				const electronHttp = (window as any).require('http');
-				return electronHttp;
+			const desktopWindow = window as typeof window & {
+				require?: (module: string) => HttpModule;
+			};
+			if (desktopWindow.require) {
+				return desktopWindow.require('http');
 			}
 		} catch {
-			// Not available
+			// Not available in the current environment.
 		}
 
-		// Dynamic import might work in some environments
 		try {
 			const httpModule = await import('http');
-			return httpModule.default || httpModule;
+			return (httpModule.default || httpModule) as HttpModule;
 		} catch {
 			return null;
 		}
 	}
 
-	/**
-	 * Handle /llm-wiki/status endpoint
-	 */
-	private async handleStatus(_req: any, res: any) {
-		try {
-			const hasApiKey = !!this.plugin.settings.apiKey;
-			const sidebarOpen = !!this.plugin.sidebarView;
+	private async routeRequest(request: IncomingRequest, response: ServerResponse): Promise<void> {
+		response.setHeader('Access-Control-Allow-Origin', '*');
+		response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+		response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+		if (request.method === 'OPTIONS') {
+			response.writeHead(200);
+			response.end();
+			return;
+		}
+
+		const url = new URL(request.url ?? '/', `http://localhost:${this.port}`);
+		const pathname = url.pathname;
+
+		if (pathname === '/llm-wiki/status' && request.method === 'GET') {
+			this.handleStatus(response);
+			return;
+		}
+
+		if (pathname === '/llm-wiki/process-url' && request.method === 'POST') {
+			await this.handleProcessUrl(request, response);
+			return;
+		}
+
+		if (pathname === '/llm-wiki/process-text' && request.method === 'POST') {
+			await this.handleProcessText(request, response);
+			return;
+		}
+
+		if (pathname === '/llm-wiki/info' && request.method === 'GET') {
+			this.handleInfo(response);
+			return;
+		}
+
+		response.writeHead(404);
+		response.end(JSON.stringify({ error: 'Not found' }));
+	}
+
+	private handleStatus(res: ServerResponse): void {
+		try {
 			const response = {
 				success: true,
 				data: {
 					enabled: true,
-					apiKeyConfigured: hasApiKey,
-					sidebarOpen,
+					apiKeyConfigured: !!this.plugin.settings.apiKey,
+					sidebarOpen: !!this.plugin.getSidebarView(),
 					provider: this.plugin.settings.aiProvider,
 					model: this.plugin.settings.model,
 					wikiPath: this.plugin.settings.wikiPath,
@@ -135,150 +159,92 @@ export class HttpServer {
 
 			res.writeHead(200, { 'Content-Type': 'application/json' });
 			res.end(JSON.stringify(response));
-		} catch (error: any) {
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
 			res.writeHead(500, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify({ success: false, error: error.message }));
+			res.end(JSON.stringify({ success: false, error: message }));
 		}
 	}
 
-	/**
-	 * Handle /llm-wiki/process-url endpoint
-	 */
-	private async handleProcessUrl(req: any, res: any) {
+	private async handleProcessUrl(req: IncomingRequest, res: ServerResponse): Promise<void> {
 		try {
-			// Read request body
-			let body = '';
-			req.on('data', (chunk: any) => {
-				body += chunk.toString();
-			});
+			const body = await this.readRequestBody(req);
+			const data = JSON.parse(body) as ProcessUrlRequestBody;
 
-			req.on('end', async () => {
-				try {
-					const data = JSON.parse(body);
-					const { url } = data;
+			if (!data.url || typeof data.url !== 'string') {
+				res.writeHead(400, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify({ success: false, error: 'URL is required and must be a string' }));
+				return;
+			}
 
-					if (!url || typeof url !== 'string') {
-						res.writeHead(400, { 'Content-Type': 'application/json' });
-						res.end(JSON.stringify({
-							success: false,
-							error: 'URL is required and must be a string',
-						}));
-						return;
-					}
+			const sidebar = this.plugin.getSidebarView();
+			if (!sidebar) {
+				res.writeHead(200, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify({
+					success: false,
+					error: 'Sidebar view not available. Please open the LLM Wiki sidebar first.',
+				}));
+				return;
+			}
 
-					// Process the URL using the sidebar view
-					const sidebar = this.plugin.sidebarView;
-					if (!sidebar) {
-						res.writeHead(200, { 'Content-Type': 'application/json' });
-						res.end(JSON.stringify({
-							success: false,
-							error: 'Sidebar view not available. Please open the LLM Wiki sidebar first.',
-						}));
-						return;
-					}
+			void sidebar.processUrl(data.url);
+			new Notice('LLM Wiki: Processing URL from browser');
 
-					// Start processing asynchronously
-					sidebar.processUrl(url);
-
-					new Notice('LLM Wiki: Processing URL from browser');
-
-					res.writeHead(200, { 'Content-Type': 'application/json' });
-					res.end(JSON.stringify({
-						success: true,
-						message: 'URL processing started. Check Obsidian for progress.',
-					}));
-				} catch (error: any) {
-					res.writeHead(500, { 'Content-Type': 'application/json' });
-					res.end(JSON.stringify({
-						success: false,
-						error: error.message || 'Unknown error',
-					}));
-				}
-			});
-		} catch (error: any) {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(JSON.stringify({
+				success: true,
+				message: 'URL processing started. Check Obsidian for progress.',
+			}));
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
 			res.writeHead(500, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify({ success: false, error: error.message }));
+			res.end(JSON.stringify({ success: false, error: message }));
 		}
 	}
 
-	/**
-	 * Handle /llm-wiki/process-text endpoint
-	 */
-	private async handleProcessText(req: any, res: any) {
+	private async handleProcessText(req: IncomingRequest, res: ServerResponse): Promise<void> {
 		try {
-			// Read request body
-			let body = '';
-			req.on('data', (chunk: any) => {
-				body += chunk.toString();
-			});
+			const body = await this.readRequestBody(req);
+			const data = JSON.parse(body) as ProcessTextRequestBody;
 
-			req.on('end', async () => {
-				try {
-					const data = JSON.parse(body);
-					const { text } = data;
+			if (!data.text || typeof data.text !== 'string') {
+				res.writeHead(400, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify({ success: false, error: 'Text is required and must be a string' }));
+				return;
+			}
 
-					if (!text || typeof text !== 'string') {
-						res.writeHead(400, { 'Content-Type': 'application/json' });
-						res.end(JSON.stringify({
-							success: false,
-							error: 'Text is required and must be a string',
-						}));
-						return;
-					}
+			const sidebar = this.plugin.getSidebarView();
+			if (!sidebar) {
+				res.writeHead(200, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify({
+					success: false,
+					error: 'Sidebar view not available. Please open the LLM Wiki sidebar first.',
+				}));
+				return;
+			}
 
-					// Process the text using the sidebar view
-					const sidebar = this.plugin.sidebarView;
+			void sidebar.processText(data.text);
+			new Notice('LLM Wiki: Processing text from browser');
 
-					if (!sidebar) {
-						res.writeHead(200, { 'Content-Type': 'application/json' });
-						res.end(JSON.stringify({
-							success: false,
-							error: 'Sidebar view not available. Please open the LLM Wiki sidebar first.',
-						}));
-						return;
-					}
-
-					// Start processing asynchronously - set text content directly
-					// We need to call the internal process method with the text
-					// For now, we'll set the input value and trigger processing
-					const inputEl = (sidebar as any).inputEl;
-
-					if (inputEl) {
-						inputEl.value = text;
-						await (sidebar as any).handleProcess();
-					}
-
-					new Notice('LLM Wiki: Processing text from browser');
-
-					res.writeHead(200, { 'Content-Type': 'application/json' });
-					res.end(JSON.stringify({
-						success: true,
-						message: 'Text processing started. Check Obsidian for progress.',
-					}));
-				} catch (error: any) {
-					res.writeHead(500, { 'Content-Type': 'application/json' });
-					res.end(JSON.stringify({
-						success: false,
-						error: error.message || 'Unknown error',
-					}));
-				}
-			});
-		} catch (error: any) {
+			res.writeHead(200, { 'Content-Type': 'application/json' });
+			res.end(JSON.stringify({
+				success: true,
+				message: 'Text processing started. Check Obsidian for progress.',
+			}));
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
 			res.writeHead(500, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify({ success: false, error: error.message }));
+			res.end(JSON.stringify({ success: false, error: message }));
 		}
 	}
 
-	/**
-	 * Handle /llm-wiki/info endpoint
-	 */
-	private async handleInfo(_req: any, res: any) {
+	private handleInfo(res: ServerResponse): void {
 		try {
 			const response = {
 				success: true,
 				data: {
 					name: 'LLM Wiki',
-					version: '0.1.1',
+					version: this.plugin.manifest.version,
 					description: 'Turn URLs, PDFs, and files into structured wiki pages with AI.',
 					settings: {
 						aiProvider: this.plugin.settings.aiProvider,
@@ -291,9 +257,28 @@ export class HttpServer {
 
 			res.writeHead(200, { 'Content-Type': 'application/json' });
 			res.end(JSON.stringify(response));
-		} catch (error: any) {
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Unknown error';
 			res.writeHead(500, { 'Content-Type': 'application/json' });
-			res.end(JSON.stringify({ success: false, error: error.message }));
+			res.end(JSON.stringify({ success: false, error: message }));
 		}
+	}
+
+	private readRequestBody(req: IncomingRequest): Promise<string> {
+		return new Promise((resolve, reject) => {
+			let body = '';
+			req.on('data', (chunk) => {
+				body += chunk.toString();
+			});
+			req.on('end', () => {
+				resolve(body);
+			});
+			req.on('error', (error) => {
+				reject(error);
+			});
+			req.on('aborted', () => {
+				reject(new Error('Request aborted'));
+			});
+		});
 	}
 }
