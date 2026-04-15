@@ -10,6 +10,8 @@
 
 Turn URLs, PDFs, and files into structured wiki pages with AI.
 
+This sentence should match `manifest.json` exactly, including the trailing punctuation.
+
 ## Features
 
 - Ingest web pages and local files from one workflow

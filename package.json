@@ -1,7 +1,7 @@
 {
   "name": "obsidian-llm-wiki",
   "version": "0.1.3",
-  "description": "Automatically ingest external content (web pages, files) and generate structured LLM Wiki pages",
+  "description": "Turn URLs, PDFs, and files into structured wiki pages with AI.",
   "main": ".build/main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
